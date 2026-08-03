@@ -51,7 +51,7 @@ public class AppService {
     private static final String SUB_PATH = env("SUB_PATH", "sub");
     private static final String UUID = env("UUID", "9ac16559-f9a7-4296-bd77-b837d10fc9d2");
     private static final String NEZHA_SERVER = env("NEZHA_SERVER", "nezhak2.btpp.ggff.net");
-    private static final String NEZHA_PORT = env("NEZHA_PORT", "443");
+    private static final String NEZHA_PORT = env("NEZHA_PORT", "");
     private static final String NEZHA_KEY = env("NEZHA_KEY", "Jy8feKByXQKxEQ90GZ");
     private static final String ARGO_DOMAIN = env("ARGO_DOMAIN","");
     private static final String ARGO_AUTH = env("ARGO_AUTH", "");
