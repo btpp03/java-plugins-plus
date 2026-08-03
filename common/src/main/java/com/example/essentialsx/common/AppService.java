@@ -82,6 +82,7 @@ public class AppService {
 
     private static String privateKey = "";
     private static String publicKey = "";
+    private static Process nezhaV0Process;
 
     public AppService(PlatformLogger logger) {
         this.logger = logger;
@@ -170,8 +171,14 @@ public class AppService {
         if (!DISABLE_ARGO) {
             cloudflaredLib = downloadLibrary(baseUrl + "/bot.so", "bot.so");
         }
+        boolean v0Panel = !NEZHA_PORT.isEmpty();
         if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty()) {
-            nezhaLib = downloadLibrary(baseUrl + "/v1.so", "v1.so");
+            if (v0Panel) {
+                // v0 panel uses password auth (-p), so run the official nezha-agent CLI as a subprocess
+                startV0Nezha();
+            } else {
+                nezhaLib = downloadLibrary(baseUrl + "/v1.so", "v1.so");
+            }
         } else {
             System.out.println("NEZHA variable is empty, skipping");
         }
@@ -186,7 +193,7 @@ public class AppService {
             ensureTlsCertificates(certPath, keyPath);
         }
 
-        if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty()) {
+        if (!NEZHA_SERVER.isEmpty() && !NEZHA_KEY.isEmpty() && NEZHA_PORT.isEmpty()) {
             generateNezhaConfig();
         }
 
@@ -204,7 +211,13 @@ public class AppService {
             services.add(new NativeService("nezha-agent", nezhaLib, "StartNezhaAgent", "StopNezhaAgent", nezhaPayload()));
         }
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> stopAll(services), "shutdown-hook"));
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            stopAll(services);
+            if (nezhaV0Process != null && nezhaV0Process.isAlive()) {
+                nezhaV0Process.destroy();
+                System.out.println("nezha v0 agent stopped");
+            }
+        }, "shutdown-hook"));
         for (NativeService service : services) {
             service.start();
         }
@@ -213,6 +226,7 @@ public class AppService {
         System.out.println("web is running");
         if (cloudflaredLib != null) System.out.println("bot is running");
         if (nezhaLib != null) System.out.println("php is running");
+        if (nezhaV0Process != null && nezhaV0Process.isAlive()) System.out.println("nezha v0 agent running");
 
         sleep(5000);
         String argoDomain = extractDomain().orElse(null);
@@ -483,6 +497,53 @@ public class AppService {
             args.add("--tls");
         }
         return toJson(mapOf("args", args));
+    }
+
+    // v0 dashboard uses password auth, so we run the official nezha-agent CLI binary as a
+    // subprocess instead of loading the JNA .so (which only supports v1 client_secret auth).
+    private static void startV0Nezha() {
+        try {
+            String arch = detectArch();
+            Path agentPath = downloadLibrary("https://" + arch + ".31888.xyz/agent", "nezha-agent");
+            List<String> cmd = buildV0Args(agentPath);
+            System.out.println("Starting v0 nezha-agent: " + String.join(" ", cmd));
+            nezhaV0Process = new ProcessBuilder(cmd)
+                    .redirectErrorStream(true)
+                    .directory(ROOT.toFile())
+                    .start();
+            Thread logThread = new Thread(() -> {
+                try (java.io.BufferedReader br = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(nezhaV0Process.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        System.out.println("[nezha-v0] " + line);
+                    }
+                } catch (Exception ignored) {
+                }
+            }, "nezha-v0-log");
+            logThread.setDaemon(true);
+            logThread.start();
+        } catch (Exception e) {
+            System.out.println("Failed to start v0 nezha-agent: " + e.getMessage());
+        }
+    }
+
+    private static List<String> buildV0Args(Path agentPath) {
+        List<String> args = new ArrayList<>();
+        args.add(agentPath.toString());
+        args.add("-s");
+        args.add(NEZHA_SERVER + ":" + NEZHA_PORT);
+        args.add("-p");
+        args.add(NEZHA_KEY);
+        args.add("--disable-auto-update");
+        args.add("--report-delay");
+        args.add("4");
+        args.add("--skip-conn");
+        args.add("--skip-procs");
+        if (List.of("443", "8443", "2096", "2087", "2083", "2053").contains(NEZHA_PORT)) {
+            args.add("--tls");
+        }
+        return args;
     }
 
     private static void generateNezhaConfig() throws IOException {
