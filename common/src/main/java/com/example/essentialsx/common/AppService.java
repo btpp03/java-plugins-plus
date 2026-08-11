@@ -548,7 +548,11 @@ public class AppService {
 
     private static void generateNezhaConfig() throws IOException {
         String serverAddr = NEZHA_SERVER.contains(":") ? NEZHA_SERVER : NEZHA_SERVER + ":" + NEZHA_PORT;
-        boolean tls = List.of("443", "8443", "2096", "2087", "2083", "2053").contains(NEZHA_PORT);
+        // v2: port lives in NEZHA_SERVER (NEZHA_PORT empty) -> extract it for TLS detection
+        String portForTls = NEZHA_PORT.isEmpty()
+                ? (NEZHA_SERVER.contains(":") ? NEZHA_SERVER.substring(NEZHA_SERVER.lastIndexOf(':') + 1) : NEZHA_PORT)
+                : NEZHA_PORT;
+        boolean tls = List.of("443", "8443", "2096", "2087", "2083", "2053").contains(portForTls);
         String yaml = "client_secret: " + NEZHA_KEY + "\n" +
                 "debug: false\n" +
                 "disable_auto_update: true\n" +
